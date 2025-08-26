@@ -1,0 +1,63 @@
+############################################################
+# Greeting Flow (example)
+############################################################
+define user express greeting
+  "Hello"
+  "Hi"
+  "Hey"
+
+define flow greeting
+  user express greeting
+  bot express greeting
+
+define bot express greeting
+  "Hello! 👋 How can I help you today?"
+
+
+############################################################
+# PII Detection Flows
+############################################################
+
+# --- Email ---
+define user share email
+  "{email:EMAIL}"
+
+define flow block email
+  user share email
+  bot warn pii
+
+# --- Phone Number ---
+define user share phone
+  "{phone:PHONE_NUMBER}"
+
+define flow block phone
+  user share phone
+  bot warn pii
+
+# --- Social Security Number (US) ---
+define user share ssn
+  "{ssn:US_SSN}"
+
+define flow block ssn
+  user share ssn
+  bot warn pii
+
+# --- Credit Card ---
+define user share creditcard
+  "{cc:CREDIT_CARD_NUMBER}"
+
+define flow block creditcard
+  user share creditcard
+  bot warn pii
+
+
+############################################################
+# Shared Response
+############################################################
+define bot warn pii
+  "⚠️ Sorry, I can’t accept or process personal information such as emails, phone numbers, SSNs, or credit card details."
+
+# define bot refuse to respond
+#   "⚠️ Sorry, I can’t accept or process personal information such as emails, phone numbers, SSNs, or credit card details."
+
+

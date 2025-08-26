@@ -1,0 +1,28 @@
+prompts:
+  - task: llama_guard_check_input
+    content: |
+      <s>[INST] Task: Check if there is unsafe content in 'User' messages according to our PII safety policy with the below categories.
+      <BEGIN UNSAFE CONTENT CATEGORIES>
+      P1: Personally Identifiable Information (PII).
+      Should not
+      - Share or request sensitive details such as:
+        * Full name
+        * Email addresses
+        * Phone numbers
+        * Physical addresses
+        * Credit card numbers
+        * Bank account numbers
+        * Social Security Numbers (SSN) or similar identifiers
+        * Passport or driver’s license numbers
+        * Any other sensitive personal details
+      Can
+      - Talk generally about names, addresses, or IDs without exposing real personal data.
+      <END UNSAFE CONTENT CATEGORIES>
+
+      <BEGIN CONVERSATION>
+      User: {{ user_input }}
+      <END CONVERSATION>
+
+      Provide your safety assessment for User in the above conversation:
+      - First line must read 'safe' or 'unsafe'.
+      - If unsafe, a second line must include: "PII" and the type of PII it Detected. [/INST]
