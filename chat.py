@@ -1,67 +1,65 @@
 import os
-import nest_asyncio
-from dotenv import load_dotenv
 from flask import Flask, request, jsonify
+from dotenv import load_dotenv
 
-# LangChain + NeMo Guardrails
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from nemoguardrails import LLMRails, RailsConfig
 
-# --- Setup ---
-nest_asyncio.apply()
-load_dotenv()  # loads OPENAI_API_KEY and NVIDIA_API_KEY from .env
+# --- Load environment ---
+load_dotenv()
+api_key = os.getenv("NVIDIA_API_KEY")
 
-# --- NVIDIA LLM ---
-llm = ChatNVIDIA(
+# --- Define NVIDIA LLM ---
+main_llm = ChatNVIDIA(
     model="deepseek-ai/deepseek-r1",
-    api_key=os.getenv("NVIDIA_API_KEY"),  # ✅ use env var
+    api_key=api_key,
     temperature=0.6,
     top_p=0.7,
-    max_tokens=4096
+    max_completion_tokens=4096,
 )
 
-# --- Load Guardrails Config ---
+# --- Load NeMo Guardrails config ---
 config = RailsConfig.from_path("config")
+rails = LLMRails(config, llm=main_llm, verbose=True)
 
-# --- Create Guardrails Wrapper ---
-app_guardrails = LLMRails(config, verbose=True, llm=llm)
-
-# --- Flask App ---
+# --- Flask app ---
 app = Flask(__name__)
 
-@app.route("/chat", methods=["POST"])
+@app.route("/api/chat", methods=["POST"])
 def chat():
-    data = request.get_json()
-    user_message = data.get("message", "")
+    data = request.get_json(force=True) or {}
+    user_message = data.get("message", "").strip()
+    session_id = data.get("session_id")
 
     if not user_message:
-        return jsonify({"error": "Message is required"}), 400
+        return jsonify({"error": "Empty message."}), 400
 
-    response = app_guardrails.generate(messages=[{"role": "user", "content": user_message}])
+    messages = [{"role": "user", "content": user_message}]
 
-    # Extract content if dict
-    if isinstance(response, dict) and "content" in response:
-        raw_content = response["content"]
-    else:
-        raw_content = str(response)
+    try:
+        result = rails.generate(messages=messages)
 
-    # --- Only return Bot message ---
-    import re
-    match = re.search(r'\*\*Bot message:\*\*\s*"([^"]+)"', raw_content)
-    if match:
-        bot_message = match.group(1)
-    else:
-        # fallback → return raw text if no Bot message found
-        bot_message = raw_content
+        # ✅ Correct extraction of reply
+        assistant_reply = result.get("content", "")
 
-    return jsonify({"response": bot_message})
+        return jsonify({
+            "reply": assistant_reply,
+            "used_llm": True,
+            "session_id": session_id
+        })
 
-
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify({"status": "Chatbot API is running 🚀"})
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "session_id": session_id
+        }), 500
 
 
-# --- Run Flask ---
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", "8000"))
+    app.run(host="0.0.0.0", port=port, debug=True)
