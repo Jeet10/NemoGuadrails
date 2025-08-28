@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from nemoguardrails import LLMRails, RailsConfig
 
-# Local helper for evaluation
 from evaluation_utils import run_fact_check_evaluation
 
 # --- Load environment ---
@@ -15,7 +14,7 @@ api_key = os.getenv("NVIDIA_API_KEY")
 if not api_key:
     raise RuntimeError("NVIDIA_API_KEY environment variable not set.")
 
-# --- Define NVIDIA LLM (main) ---
+# --- Define NVIDIA LLM ---
 main_llm = ChatNVIDIA(
     model="deepseek-ai/deepseek-r1",
     api_key=api_key,
@@ -24,28 +23,80 @@ main_llm = ChatNVIDIA(
     max_completion_tokens=4096,
 )
 
-# --- Load NeMo Guardrails config using from_content ---
-def load_rails_config():
-    with open("config/rails.co", "r", encoding="utf-8") as f:
-        colang_content = f.read()
+# --- Build NeMo Guardrails config in-memory ---
+config_dict = {
+    "models": [
+        {
+            "type": "main",
+            "engine": "nim",
+            "model": "deepseek-ai/deepseek-r1",
+            "parameters": {
+                "api_key": api_key,
+                "nim_base_url": "https://ai.api.nvidia.com",
+            },
+        },
+        {
+            "type": "llama_guard",
+            "engine": "nim",
+            "model": "deepseek-ai/deepseek-r1",
+            "parameters": {
+                "api_key": api_key,
+                "nim_base_url": "https://ai.api.nvidia.com",
+            },
+        },
+    ],
+    "rails": {
+        "input": {"flows": []},
+        "output": {"flows": ["self check facts"]},
+    },
+    "lowest_temperature": 0.1,
+    "prompts": [
+        {
+            "task": "self_check_facts",
+            "content": """You are given evidence passages and a candidate answer (hypothesis).
+Determine if the answer is fully grounded in, and entailed by, ONLY the evidence.
+Answer strictly with "yes" or "no".
+evidence: {{ evidence }}
+hypothesis: {{ response }}
+entails:""",
+        }
+    ],
+}
 
-    with open("config/config.yml", "r", encoding="utf-8") as f:
-        yaml_content = f.read()
+# colang rules as string (rails.co)
+colang_rules = """
+define user greeting
+  "hi"
+  "hello"
+  "hey"
+  "good morning"
+  "good afternoon"
+  "good evening"
 
-    # prompts.yml is optional, but if you have it include it too
-    prompts_path = "config/prompts.yml"
-    if os.path.exists(prompts_path):
-        with open(prompts_path, "r", encoding="utf-8") as f:
-            prompts_content = f.read()
-        # merge prompts.yml into yaml_content
-        yaml_content = yaml_content + "\n" + prompts_content
+define bot greeting response
+  "Hi,👋 I am NemoGuardrails Agent, How can I Help you today?"
 
-    return RailsConfig.from_content(
-        colang_content=colang_content,
-        yaml_content=yaml_content,
-    )
+define flow greet
+  user greeting
+  bot greeting response
 
-rails_config = load_rails_config()
+define user email
+  "{email:EMAIL}"
+
+define bot email response
+  "Please Don't share PII Information"
+
+define flow emailResponse
+  user email
+  bot email response
+"""
+
+# Create RailsConfig from dict + colang
+rails_config = RailsConfig.from_content(
+    config=config_dict,
+    colang_content=colang_rules,
+)
+
 rails = LLMRails(rails_config, llm=main_llm, verbose=True)
 
 # --- Flask app ---
@@ -60,14 +111,10 @@ def chat():
     if not user_message:
         return jsonify({"error": "Empty message."}), 400
 
-    messages = [{"role": "user", "content": user_message}]
-
     try:
-        result = rails.generate(messages=messages)
-        assistant_reply = result.get("content", "")
-
+        result = rails.generate(messages=[{"role": "user", "content": user_message}])
         return jsonify({
-            "reply": assistant_reply,
+            "reply": result.get("content", ""),
             "used_llm": True,
             "session_id": session_id
         })
@@ -79,38 +126,22 @@ def chat():
 def evaluate():
     data = request.get_json(force=True) or {}
     eval_type = data.get("type")
-    if not eval_type:
-        return jsonify({"error": "Missing 'type' in request body."}), 400
 
-    if eval_type not in {"fact_checking"}:
-        return jsonify({"error": f"Unsupported evaluation type '{eval_type}'."}), 400
+    if eval_type != "fact_checking":
+        return jsonify({"error": "Unsupported evaluation type."}), 400
 
     try:
-        if eval_type == "fact_checking":
-            config_path = data.get("config_path", "config")
-            dataset_path = data.get("dataset_path", "data/factchecking/sample.json")
-            num_samples = int(data.get("num_samples", 50))
-            create_negatives = bool(data.get("create_negatives", True))
-            write_outputs = bool(data.get("write_outputs", False))
-            output_dir = data.get("output_dir", "eval_outputs/factchecking")
-
-            metrics = run_fact_check_evaluation(
-                config_path=config_path,
-                dataset_path=dataset_path,
-                num_samples=num_samples,
-                create_negatives=create_negatives,
-                write_outputs=write_outputs,
-                output_dir=output_dir,
-            )
-
-            return jsonify({"type": eval_type, "metrics": metrics})
-
-    except FileNotFoundError as fe:
-        return jsonify({"error": f"File not found: {fe}"}), 404
+        metrics = run_fact_check_evaluation(
+            config_path="config",  # still points to disk for dataset
+            dataset_path=data.get("dataset_path", "data/factchecking/sample.json"),
+            num_samples=int(data.get("num_samples", 50)),
+            create_negatives=bool(data.get("create_negatives", True)),
+            write_outputs=bool(data.get("write_outputs", False)),
+            output_dir=data.get("output_dir", "eval_outputs/factchecking"),
+        )
+        return jsonify({"type": eval_type, "metrics": metrics})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-    return jsonify({"error": "Unknown evaluation error."}), 500
 
 
 @app.route("/health", methods=["GET"])
