@@ -3,14 +3,14 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
-from nemoguardrails import LLMRails, RailsConfig
+from nemoguardrails import LLMRails
 
+from dynamic_config import build_dynamic_config
 from evaluation_utils import run_fact_check_evaluation
 
 # --- Load environment ---
 load_dotenv()
 api_key = os.getenv("NVIDIA_API_KEY")
-
 if not api_key:
     raise RuntimeError("NVIDIA_API_KEY environment variable not set.")
 
@@ -23,80 +23,8 @@ main_llm = ChatNVIDIA(
     max_completion_tokens=4096,
 )
 
-# --- Build NeMo Guardrails config in-memory ---
-config_dict = {
-    "models": [
-        {
-            "type": "main",
-            "engine": "nim",
-            "model": "deepseek-ai/deepseek-r1",
-            "parameters": {
-                "api_key": api_key,
-                "nim_base_url": "https://ai.api.nvidia.com",
-            },
-        },
-        {
-            "type": "llama_guard",
-            "engine": "nim",
-            "model": "deepseek-ai/deepseek-r1",
-            "parameters": {
-                "api_key": api_key,
-                "nim_base_url": "https://ai.api.nvidia.com",
-            },
-        },
-    ],
-    "rails": {
-        "input": {"flows": []},
-        "output": {"flows": ["self check facts"]},
-    },
-    "lowest_temperature": 0.1,
-    "prompts": [
-        {
-            "task": "self_check_facts",
-            "content": """You are given evidence passages and a candidate answer (hypothesis).
-Determine if the answer is fully grounded in, and entailed by, ONLY the evidence.
-Answer strictly with "yes" or "no".
-evidence: {{ evidence }}
-hypothesis: {{ response }}
-entails:""",
-        }
-    ],
-}
-
-# colang rules as string (rails.co)
-colang_rules = """
-define user greeting
-  "hi"
-  "hello"
-  "hey"
-  "good morning"
-  "good afternoon"
-  "good evening"
-
-define bot greeting response
-  "Hi,👋 I am NemoGuardrails Agent, How can I Help you today?"
-
-define flow greet
-  user greeting
-  bot greeting response
-
-define user email
-  "{email:EMAIL}"
-
-define bot email response
-  "Please Don't share PII Information"
-
-define flow emailResponse
-  user email
-  bot email response
-"""
-
-# Create RailsConfig from dict + colang
-rails_config = RailsConfig.from_content(
-    config=config_dict,
-    colang_content=colang_rules,
-)
-
+# --- Build NeMo Guardrails config dynamically ---
+rails_config = build_dynamic_config(api_key)
 rails = LLMRails(rails_config, llm=main_llm, verbose=True)
 
 # --- Flask app ---
@@ -132,7 +60,7 @@ def evaluate():
 
     try:
         metrics = run_fact_check_evaluation(
-            config_path="config",  # still points to disk for dataset
+            config_path="config",  # still points to dataset only
             dataset_path=data.get("dataset_path", "data/factchecking/sample.json"),
             num_samples=int(data.get("num_samples", 50)),
             create_negatives=bool(data.get("create_negatives", True)),
