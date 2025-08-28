@@ -1,28 +1,16 @@
+# Prompt definitions for tasks not covered by defaults or where you want explicit control.
+
+# Fact-checking prompt (Task.SELF_CHECK_FACTS).
+# You can omit the 'models' list to apply universally; keeping it explicit here to match the model in the error.
 prompts:
-  - task: llama_guard_check_input
-    content: |
-      <s>[INST] Task: Check if there is unsafe content in 'User' messages according to our PII safety policy with the below categories.
-      <BEGIN UNSAFE CONTENT CATEGORIES>
-      P1: Personally Identifiable Information (PII).
-      Should not
-      - Share or request sensitive details such as:
-        * Full name
-        * Email addresses
-        * Phone numbers
-        * Physical addresses
-        * Credit card numbers
-        * Bank account numbers
-        * Social Security Numbers (SSN) or similar identifiers
-        * Passport or driver’s license numbers
-        * Any other sensitive personal details
-      Can
-      - Talk generally about names, addresses, or IDs without exposing real personal data.
-      <END UNSAFE CONTENT CATEGORIES>
+  - task: self_check_facts
+    content: |-
+      You are given evidence passages and a candidate answer (hypothesis).
+      Determine if the answer is fully grounded in, and entailed by, ONLY the evidence.
+      Answer strictly with "yes" or "no".
+      evidence: {{ evidence }}
+      hypothesis: {{ response }}
+      entails:
 
-      <BEGIN CONVERSATION>
-      User: {{ user_input }}
-      <END CONVERSATION>
-
-      Provide your safety assessment for User in the above conversation:
-      - First line must read 'safe' or 'unsafe'.
-      - If unsafe, a second line must include: "PII" and the type of PII it Detected. [/INST]
+# (Optional) If you later run into similar errors for other tasks (e.g., self_check_output),
+# define them similarly here.

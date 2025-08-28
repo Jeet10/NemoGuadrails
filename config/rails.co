@@ -15,7 +15,6 @@ define flow greet
   user greeting
   bot greeting response
 
-
 define user email
   "{email:EMAIL}"
 

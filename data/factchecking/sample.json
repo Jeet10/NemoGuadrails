@@ -1,0 +1,32 @@
+[
+  {
+    "evidence": "The Eiffel Tower is located in Paris, France.",
+    "question": "Where is the Eiffel Tower located?",
+    "answer": "The Eiffel Tower is in Paris.",
+    "incorrect_answer": "The Eiffel Tower is in Berlin."
+  },
+  {
+    "evidence": "The Pacific Ocean is the largest ocean on Earth.",
+    "question": "Which ocean is the largest on Earth?",
+    "answer": "The Pacific Ocean is Earth's largest ocean.",
+    "incorrect_answer": "The Atlantic Ocean is the largest ocean."
+  },
+  {
+    "evidence": "Python is a high-level, interpreted programming language.",
+    "question": "Is Python compiled or interpreted?",
+    "answer": "Python is interpreted.",
+    "incorrect_answer": "Python is a low-level compiled language."
+  },
+  {
+    "evidence": "Mount Everest is the tallest mountain above sea level.",
+    "question": "What is the tallest mountain above sea level?",
+    "answer": "Mount Everest is the tallest mountain above sea level.",
+    "incorrect_answer": "K2 is the tallest mountain above sea level."
+  },
+  {
+    "evidence": "Water boils at 100 degrees Celsius at standard atmospheric pressure.",
+    "question": "At what temperature does water boil at standard atmospheric pressure?",
+    "answer": "Water boils at 100°C under standard pressure.",
+    "incorrect_answer": "Water boils at 50°C under standard pressure."
+  }
+]
