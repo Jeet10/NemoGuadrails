@@ -24,14 +24,32 @@ main_llm = ChatNVIDIA(
     max_completion_tokens=4096,
 )
 
-# --- Load NeMo Guardrails config ---
-# The directory 'config' must contain rails.co and config.yml
-rails_config = RailsConfig.from_path("config")
+# --- Load NeMo Guardrails config using from_content ---
+def load_rails_config():
+    with open("config/rails.co", "r", encoding="utf-8") as f:
+        colang_content = f.read()
+
+    with open("config/config.yml", "r", encoding="utf-8") as f:
+        yaml_content = f.read()
+
+    # prompts.yml is optional, but if you have it include it too
+    prompts_path = "config/prompts.yml"
+    if os.path.exists(prompts_path):
+        with open(prompts_path, "r", encoding="utf-8") as f:
+            prompts_content = f.read()
+        # merge prompts.yml into yaml_content
+        yaml_content = yaml_content + "\n" + prompts_content
+
+    return RailsConfig.from_content(
+        colang_content=colang_content,
+        yaml_content=yaml_content,
+    )
+
+rails_config = load_rails_config()
 rails = LLMRails(rails_config, llm=main_llm, verbose=True)
 
 # --- Flask app ---
 app = Flask(__name__)
-
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
@@ -46,7 +64,6 @@ def chat():
 
     try:
         result = rails.generate(messages=messages)
-        # result is a dict; 'content' holds assistant reply
         assistant_reply = result.get("content", "")
 
         return jsonify({
@@ -54,31 +71,12 @@ def chat():
             "used_llm": True,
             "session_id": session_id
         })
-
     except Exception as e:
-        return jsonify({
-            "error": str(e),
-            "session_id": session_id
-        }), 500
+        return jsonify({"error": str(e), "session_id": session_id}), 500
 
 
 @app.route("/api/evaluate", methods=["POST"])
 def evaluate():
-    """
-    Run an evaluation. Currently supports:
-      type = fact_checking
-
-    JSON Body Example:
-    {
-      "type": "fact_checking",
-      "config_path": "config",
-      "dataset_path": "data/factchecking/sample.json",
-      "num_samples": 20,
-      "create_negatives": true
-    }
-
-    Returns JSON with metrics.
-    """
     data = request.get_json(force=True) or {}
     eval_type = data.get("type")
     if not eval_type:
@@ -105,10 +103,7 @@ def evaluate():
                 output_dir=output_dir,
             )
 
-            return jsonify({
-                "type": eval_type,
-                "metrics": metrics
-            })
+            return jsonify({"type": eval_type, "metrics": metrics})
 
     except FileNotFoundError as fe:
         return jsonify({"error": f"File not found: {fe}"}), 404
