@@ -35,20 +35,25 @@ def chat():
     data = request.get_json(force=True) or {}
     user_message = data.get("message", "").strip()
     session_id = data.get("session_id")
+    enabled_rules = data.get("enabled_rules", [])  # NEW
 
     if not user_message:
         return jsonify({"error": "Empty message."}), 400
 
     try:
+        # Dynamically rebuild config with requested rules
+        rails_config = build_dynamic_config(api_key, enabled_rules=enabled_rules)
+        rails = LLMRails(rails_config, llm=main_llm, verbose=True)
+
         result = rails.generate(messages=[{"role": "user", "content": user_message}])
         return jsonify({
             "reply": result.get("content", ""),
             "used_llm": True,
+            "enabled_rules": enabled_rules,
             "session_id": session_id
         })
     except Exception as e:
         return jsonify({"error": str(e), "session_id": session_id}), 500
-
 
 @app.route("/api/evaluate", methods=["POST"])
 def evaluate():
