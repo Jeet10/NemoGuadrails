@@ -45,7 +45,7 @@ entails:""",
         ],
     }
 
-    # === Colang rules (was rails.co) ===
+    # === Colang rules (was rails.co + new toxic language rail) ===
     colang_rules = """
     define user greeting
       "hi"
@@ -71,6 +71,25 @@ entails:""",
     define flow emailResponse
       user email
       bot email response
+
+    # 🚨 Toxic Language Rail
+    define user toxic
+      "shut up"
+      "stupid"
+      "idiot"
+      "dumb"
+      "hate you"
+      "f***"
+      "b***"
+      "kill yourself"
+      "go to hell"
+
+    define bot toxic response
+      "⚠️ Please avoid using toxic or offensive language."
+
+    define flow toxic language
+      user toxic
+      bot toxic response
     """
 
     # Build final config object
